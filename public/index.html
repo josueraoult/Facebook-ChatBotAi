@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amani Chat - Messenger Bot</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="/images/amani-logo.png" alt="Amani Logo" class="logo">
+            <h1>Amani Chat Bot 🌍</h1>
+            <p>Assistant Messenger intelligent avec intégration Gemini AI</p>
+        </header>
+
+        <div class="status-box">
+            <h2>État du Service</h2>
+            <div id="status-indicator" class="status-active">
+                <span class="status-dot"></span>
+                <span>En ligne</span>
+            </div>
+            <p>Version: 2.1.0</p>
+            <p>Dernière mise à jour: <span id="last-update"></span></p>
+        </div>
+
+        <div class="features">
+            <h2>Fonctionnalités</h2>
+            <ul>
+                <li>💬 Chat intelligent multilingue</li>
+                <li>🌍 Personnalité africaine (Amani)</li>
+                <li>🤖 Intégration Gemini AI</li>
+                <li>🔄 Système anti-censure</li>
+                <li>📊 Analytics en temps réel</li>
+            </ul>
+        </div>
+
+        <footer>
+            <p>Créé par Josué - Burundi | © 2025</p>
+            <p class="small">"Amani" signifie "Paix" en Swahili</p>
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('last-update').textContent = new Date().toLocaleDateString('fr-FR');
+    </script>
+</body>
+</html>
