@@ -11,14 +11,9 @@
       "src": "/webhook",
       "dest": "index.js",
       "methods": ["GET", "POST"]
-    },
-    {
-      "src": "/images/(.*)",
-      "dest": "public/images/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "index.js"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
