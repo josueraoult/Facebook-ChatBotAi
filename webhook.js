@@ -1,156 +1,13 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const proxyManager = require('./proxy-manager');
 const gemini = require('./gemini');
 
-// Système de contournement amélioré
-class MetaBypass {
-  constructor() {
-    this.tokenPool = [
-      process.env.PRIMARY_ACCESS_TOKEN,
-      process.env.SECONDARY_ACCESS_TOKEN
-    ];
-    this.currentTokenIndex = 0;
-    this.proxyUrls = [
-      'https://proxy1.meta-bypass.tech/api',
-      'https://proxy2.meta-bypass.tech/api'
-    ];
-  }
+// Configuration
+const MAX_RETRIES = 3;
+const REQUEST_TIMEOUT = 5000;
 
-  get currentToken() {
-    return this.tokenPool[this.currentTokenIndex];
-  }
-
-  rotateToken() {
-    this.currentTokenIndex = (this.currentTokenIndex + 1) % this.tokenPool.length;
-  }
-
-  async sendAPIRequest(payload) {
-    const proxyUrl = this.proxyUrls[Math.floor(Math.random() * this.proxyUrls.length)];
-    const headers = {
-      'X-Forwarded-For': this.generateRandomIP(),
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    };
-
-    try {
-      const response = await axios.post(
-        `${proxyUrl}/send-message`,
-        {
-          payload,
-          token: this.currentToken
-        },
-        { headers, timeout: 4000 }
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Proxy request failed, falling back to direct API');
-      return this.sendDirectRequest(payload);
-    }
-  }
-
-  async sendDirectRequest(payload) {
-    try {
-      const response = await axios.post(
-        `https://graph.facebook.com/v19.0/me/messages`,
-        payload,
-        {
-          params: { access_token: this.currentToken },
-          timeout: 3000
-        }
-      );
-      this.rotateToken();
-      return response.data;
-    } catch (error) {
-      throw new Error(`API request failed: ${error.message}`);
-    }
-  }
-
-  generateRandomIP() {
-    return Array.from({length: 4}, () => Math.floor(Math.random() * 255)).join('.');
-  }
-}
-
-const bypassSystem = new MetaBypass();
-
-// Gestion du webhook
-const handleWebhook = async (req, res) => {
-  if (!verifySignature(req)) {
-    console.warn('Invalid signature - attempting to process anyway');
-  }
-
-  if (req.body.object === 'page') {
-    await Promise.all(req.body.entry.map(processEntry));
-    res.status(200).send('EVENT_RECEIVED');
-  } else {
-    res.sendStatus(404);
-  }
-};
-
-const processEntry = async (entry) => {
-  for (const event of entry.messaging) {
-    try {
-      if (event.postback?.payload === 'GET_STARTED') {
-        await sendWelcomeMessage(event.sender.id);
-      } else if (event.message?.text) {
-        await processUserMessage(event);
-      }
-    } catch (error) {
-      console.error('Event processing error:', error);
-      await sendErrorMessage(event.sender.id);
-    }
-  }
-};
-
-// Fonctions améliorées
-const sendWelcomeMessage = async (senderId) => {
-  const message = {
-    attachment: {
-      type: "template",
-      payload: {
-        template_type: "generic",
-        elements: [{
-          title: "Bienvenue sur Amani Chat! 🌍",
-          image_url: `${process.env.BASE_URL}/images/amani-logo.png`,
-          subtitle: "Je suis votre assistant africain intelligent. Comment puis-je vous aider?",
-          buttons: [
-            {
-              type: "postback",
-              title: "Options",
-              payload: "SHOW_OPTIONS"
-            },
-            {
-              type: "web_url",
-              title: "Notre Site",
-              url: "https://example.com",
-              webview_height_ratio: "full"
-            },
-            {
-              type: "phone_number",
-              title: "Appeler support",
-              payload: "+123456789"
-            }
-          ]
-        }]
-      }
-    }
-  };
-
-  await bypassSystem.sendAPIRequest({
-    recipient: { id: senderId },
-    message,
-    messaging_type: "RESPONSE"
-  });
-};
-
-const processUserMessage = async (event) => {
-  const responseText = await gemini.generateContent(event.message.text);
-  
-  await bypassSystem.sendAPIRequest({
-    recipient: { id: event.sender.id },
-    message: { text: responseText },
-    messaging_type: "RESPONSE"
-  });
-};
-
+// Vérification de la signature webhook
 const verifySignature = (req) => {
   const signature = req.headers['x-hub-signature-256'];
   if (!signature) return false;
@@ -164,13 +21,163 @@ const verifySignature = (req) => {
   );
 };
 
-module.exports = {
-  handleWebhook,
-  verifyWebhook: (req, res) => {
-    if (req.query['hub.verify_token'] === process.env.VERIFY_TOKEN) {
-      res.status(200).send(req.query['hub.challenge']);
-    } else {
-      res.sendStatus(403);
+// Gestionnaire principal du webhook
+const handleWebhook = async (req, res) => {
+  try {
+    // Vérification de sécurité (optionnelle en mode contournement)
+    if (process.env.NODE_ENV === 'production' && !verifySignature(req)) {
+      console.warn('Invalid signature - processing anyway in bypass mode');
+    }
+
+    if (req.body.object !== 'page') {
+      return res.status(400).send('Invalid request format');
+    }
+
+    await Promise.all(req.body.entry.map(processEntry));
+    res.status(200).send('EVENT_RECEIVED');
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    res.status(500).send('SERVER_ERROR');
+  }
+};
+
+// Traitement d'une entrée individuelle
+const processEntry = async (entry) => {
+  for (const event of entry.messaging) {
+    try {
+      if (event.postback?.payload === 'GET_STARTED') {
+        await sendWelcomeMessage(event.sender.id);
+      } else if (event.message?.text) {
+        await processUserMessage(event);
+      }
+      // Ajouter d'autres types d'événements ici
+    } catch (error) {
+      console.error('Error processing event:', error);
+      await sendErrorMessage(event.sender.id);
     }
   }
+};
+
+// Envoi du message de bienvenue
+const sendWelcomeMessage = async (senderId) => {
+  const message = {
+    attachment: {
+      type: "template",
+      payload: {
+        template_type: "generic",
+        elements: [{
+          title: "Bienvenue sur Amani Chat! 🌍",
+          image_url: `${process.env.BASE_URL}/images/welcome.jpg`,
+          subtitle: "Je suis votre assistant africain intelligent. Comment puis-je vous aider?",
+          buttons: [
+            {
+              type: "postback",
+              title: "Options",
+              payload: "SHOW_OPTIONS"
+            },
+            {
+              type: "web_url",
+              title: "Visitez notre site",
+              url: "https://example.com"
+            }
+          ]
+        }]
+      }
+    }
+  };
+
+  await sendWithFallback(senderId, message);
+};
+
+// Traitement des messages utilisateur
+const processUserMessage = async (event) => {
+  try {
+    const responseText = await gemini.generateContent(event.message.text);
+    await sendWithFallback(event.sender.id, { text: responseText });
+  } catch (error) {
+    console.error('Gemini processing error:', error);
+    await sendErrorMessage(event.sender.id);
+  }
+};
+
+// Système d'envoi avec fallback proxy/direct
+const sendWithFallback = async (recipientId, message, retries = MAX_RETRIES) => {
+  const payload = {
+    recipient: { id: recipientId },
+    message: message,
+    messaging_type: "RESPONSE"
+  };
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // Essayer d'abord avec proxy
+      if (attempt === 1) {
+        return await proxyManager.sendRequest(payload);
+      } 
+      // Fallback direct
+      else {
+        return await sendDirect(payload);
+      }
+    } catch (error) {
+      console.error(`Attempt ${attempt} failed:`, error.message);
+      if (attempt === retries) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+};
+
+// Envoi direct à l'API Facebook
+const sendDirect = async (payload) => {
+  try {
+    const response = await axios.post(
+      'https://graph.facebook.com/v19.0/me/messages',
+      payload,
+      {
+        params: { access_token: process.env.PAGE_ACCESS_TOKEN },
+        timeout: REQUEST_TIMEOUT,
+        headers: {
+          'X-Forwarded-For': proxyManager.generateRandomIP(),
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Direct send failed:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// Envoi de message d'erreur
+const sendErrorMessage = async (senderId) => {
+  const errorMessage = {
+    text: "Désolé, je rencontre des difficultés techniques. Veuillez réessayer plus tard. 🕊️"
+  };
+  
+  try {
+    await sendDirect({
+      recipient: { id: senderId },
+      message: errorMessage,
+      messaging_type: "RESPONSE"
+    });
+  } catch (fallbackError) {
+    console.error('Even error message failed to send:', fallbackError);
+  }
+};
+
+// Vérification du webhook pour Facebook
+const verifyWebhook = (req, res) => {
+  if (req.query['hub.mode'] === 'subscribe' &&
+      req.query['hub.verify_token'] === process.env.VERIFY_TOKEN) {
+    console.log('Webhook verified');
+    res.status(200).send(req.query['hub.challenge']);
+  } else {
+    console.error('Verification failed');
+    res.sendStatus(403);
+  }
+};
+
+module.exports = {
+  handleWebhook,
+  verifyWebhook
 };
