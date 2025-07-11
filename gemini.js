@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
 // Amani Chat system prompt (multilingual)
 const AMANI_PROMPT = {
