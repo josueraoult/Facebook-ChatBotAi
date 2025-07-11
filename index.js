@@ -1,34 +1,20 @@
 require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const webhookHandler = require('./webhook');
-const gemini = require('./gemini');
+const { handleWebhook, verifyWebhook } = require('./webhook');
+const { checkProxies } = require('./proxy-manager');
 
 const app = express();
-app.use(bodyParser.json());
-
-const PORT = process.env.PORT || 3000;
+app.use(express.json());
 
 // Routes
-app.get('/', (req, res) => {
-  res.send('Facebook Messenger Bot with Gemini AI is running!');
-});
+app.get('/webhook', verifyWebhook);
+app.post('/webhook', handleWebhook);
+app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// Webhook endpoint
-app.get('/webhook', webhookHandler.verifyWebhook);
-app.post('/webhook', webhookHandler.handleWebhook);
+// Vérification périodique des proxies
+setInterval(checkProxies, 3600000); // Toutes les heures
 
-// Start server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-
-// Gemini test route
-app.get('/test-gemini', async (req, res) => {
-  try {
-    const response = await gemini.generateContent("Hello Gemini!");
-    res.json(response);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  console.log(`Server running on port ${PORT}`);
 });
